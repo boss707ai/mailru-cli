@@ -72,7 +72,7 @@ Errors are JSON on stderr: `{"error": "..."}`.
 ## Development
 
 ```bash
-git clone https://github.com/smart-boss/mailru-cli && cd mailru-cli
+git clone https://github.com/boss707ai/mailru-cli && cd mailru-cli
 python -m venv .venv && . .venv/bin/activate
 pip install -e '.[dev]'
 pytest

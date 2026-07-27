@@ -28,7 +28,7 @@ dependencies = [
 dev = ["pytest>=8"]
 
 [project.urls]
-Homepage = "https://github.com/smart-boss/mailru-cli"
+Homepage = "https://github.com/boss707ai/mailru-cli"
 
 [project.scripts]
 mailru = "mailru_cli.cli:main"
