@@ -4,12 +4,28 @@ Cyrillic «Отправленные»/«Черновики»)."""
 from __future__ import annotations
 
 import datetime as dt
+import ssl
 
 from imap_tools import AND, MailBox
 
+# Python's imaplib/smtplib default to an UNVERIFIED ssl context; a verifying
+# one must be passed explicitly or the app password is exposed to MITM.
+SSL_CONTEXT = ssl.create_default_context()
+
+
+def check_clean(value: str | None, name: str) -> str | None:
+    """Reject control characters (incl. CR/LF) in values that end up inside
+    IMAP protocol commands — folder names, UIDs, search terms."""
+    if value and any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
+        raise ValueError(f"{name} contains control characters")
+    return value
+
 
 def open_mailbox(cfg: dict, email: str, password: str, folder: str = "INBOX") -> MailBox:
-    mailbox = MailBox(cfg["imap_host"], cfg["imap_port"], timeout=cfg["timeout"])
+    check_clean(folder, "folder")
+    mailbox = MailBox(
+        cfg["imap_host"], cfg["imap_port"], timeout=cfg["timeout"], ssl_context=SSL_CONTEXT
+    )
     return mailbox.login(email, password, initial_folder=folder)
 
 
@@ -23,6 +39,14 @@ def build_criteria(
     before: str | None = None,
     uid: str | None = None,
 ):
+    for name, value in (
+        ("--from", from_addr),
+        ("--to", to_addr),
+        ("--subject", subject),
+        ("--text", text),
+        ("uid", uid),
+    ):
+        check_clean(value, name)
     kwargs: dict = {}
     if unread:
         kwargs["seen"] = False

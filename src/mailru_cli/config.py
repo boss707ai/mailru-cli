@@ -50,9 +50,18 @@ def save_config(cfg: dict) -> None:
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     stored = {k: v for k, v in cfg.items() if DEFAULTS.get(k) != v}
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(stored, f, ensure_ascii=False, indent=2)
-    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    # Atomic replace; the temp file is 0600 from the moment it exists, so a
+    # password is never readable by other users even mid-write.
+    tmp = path.with_suffix(".json.tmp")
+    tmp.unlink(missing_ok=True)  # stale leftover from a crashed run
+    fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, stat.S_IRUSR | stat.S_IWUSR)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(stored, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
 
 
 def resolve_email(cfg: dict) -> str | None:

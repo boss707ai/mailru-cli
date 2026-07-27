@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import mimetypes
 import smtplib
+import ssl
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, getaddresses, make_msgid
 from pathlib import Path
@@ -77,10 +78,21 @@ def describe(msg: EmailMessage, bcc: list[str]) -> dict:
     }
 
 
+# smtplib defaults to an unverified ssl context — same trap as imaplib.
+SSL_CONTEXT = ssl.create_default_context()
+
+
+def connect(cfg: dict, email: str, password: str) -> smtplib.SMTP_SSL:
+    smtp = smtplib.SMTP_SSL(
+        cfg["smtp_host"], cfg["smtp_port"], timeout=cfg["timeout"], context=SSL_CONTEXT
+    )
+    smtp.login(email, password)
+    return smtp
+
+
 def send(cfg: dict, email: str, password: str, msg: EmailMessage, bcc: list[str]) -> dict:
     recipients = extract_addrs(msg["To"], msg["Cc"], *bcc)
-    with smtplib.SMTP_SSL(cfg["smtp_host"], cfg["smtp_port"], timeout=cfg["timeout"]) as smtp:
-        smtp.login(email, password)
+    with connect(cfg, email, password) as smtp:
         refused = smtp.send_message(msg, from_addr=email, to_addrs=recipients)
     return {
         "sent": True,

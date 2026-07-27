@@ -44,7 +44,10 @@ def _to_table(data) -> str:
         value = row.get(key, "")
         if isinstance(value, (dict, list)):
             value = json.dumps(value, ensure_ascii=False)
-        return str(value)[:60]
+        # Mail content is untrusted: strip control chars (ANSI escapes etc.)
+        # so a hostile subject can't drive the terminal.
+        clean = "".join(ch for ch in str(value) if ord(ch) >= 0x20 and ord(ch) != 0x7F)
+        return clean[:60]
 
     widths = {k: max(len(k), *(len(cell(r, k)) for r in rows)) for k in keys}
     lines = [" | ".join(k.ljust(widths[k]) for k in keys)]
@@ -133,14 +136,14 @@ def auth_setup(ctx: click.Context, email_opt: str | None, store: str) -> None:
             cfgmod.store_password_keyring(email, password)
             stored_in = "keyring"
         except Exception as exc:
-            click.echo(
-                json.dumps(
-                    {"warning": f"keyring unavailable ({exc}); falling back to config file"},
-                    ensure_ascii=False,
-                ),
-                err=True,
+            # No silent downgrade to plaintext — storing in the config file
+            # must be the user's explicit choice.
+            fail(
+                f"OS credential store unavailable ({exc}). "
+                "Re-run with `--store config` to store the password in the config file "
+                "(plaintext, 0600), or use MAILRU_PASSWORD env.",
+                EXIT_AUTH,
             )
-            store = "config"
     if store == "config":
         cfg["password"] = password
         stored_in = "config"
@@ -168,8 +171,8 @@ def auth_status(ctx: click.Context) -> None:
 
     smtp_ok, smtp_error = True, None
     try:
-        with smtplib.SMTP_SSL(cfg["smtp_host"], cfg["smtp_port"], timeout=cfg["timeout"]) as s:
-            s.login(email, password)
+        with smtpmod.connect(cfg, email, password):
+            pass
     except NETWORK_ERRORS as exc:
         smtp_ok, smtp_error = False, str(exc)
 
@@ -222,7 +225,7 @@ def mail_list(ctx: click.Context, folder: str, limit: int, unread: bool) -> None
                 serialize.envelope(m)
                 for m in imapmod.fetch(mb, criteria, limit=limit, headers_only=True)
             ]
-    except NETWORK_ERRORS as exc:
+    except (*NETWORK_ERRORS, ValueError) as exc:
         fail(str(exc))
     emit(ctx, messages)
 
@@ -249,8 +252,8 @@ def mail_read(
     """Read one message by IMAP UID."""
     cfg = cfgmod.load_config()
     email, password, _ = _credentials(cfg)
-    criteria = imapmod.build_criteria(uid=uid)
     try:
+        criteria = imapmod.build_criteria(uid=uid)
         with imapmod.open_mailbox(cfg, email, password, folder) as mb:
             found = list(
                 imapmod.fetch(
@@ -267,11 +270,10 @@ def mail_read(
                 saved = []
                 for i, att in enumerate(msg.attachments):
                     name = serialize.safe_filename(att.filename, f"attachment-{i}")
-                    path = target / name
-                    path.write_bytes(att.payload)
+                    path = serialize.write_unique(target, name, att.payload)
                     saved.append(str(path))
                 data["saved_attachments"] = saved
-    except NETWORK_ERRORS as exc:
+    except (*NETWORK_ERRORS, ValueError) as exc:
         fail(str(exc))
     emit(ctx, data)
 
@@ -315,14 +317,14 @@ def mail_search(
             before=before,
         )
     except ValueError as exc:
-        fail(f"bad date: {exc}")
+        fail(str(exc))
     try:
         with imapmod.open_mailbox(cfg, email, password, folder) as mb:
             messages = [
                 serialize.envelope(m)
                 for m in imapmod.fetch(mb, criteria, limit=limit, headers_only=True)
             ]
-    except NETWORK_ERRORS as exc:
+    except (*NETWORK_ERRORS, ValueError) as exc:
         fail(str(exc))
     emit(ctx, messages)
 

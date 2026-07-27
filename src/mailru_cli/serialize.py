@@ -45,3 +45,19 @@ def safe_filename(name: str, fallback: str) -> str:
     if cleaned in ("", ".", ".."):
         return fallback
     return cleaned
+
+
+def write_unique(directory: Path, name: str, payload: bytes) -> Path:
+    """Write exclusively (never overwrite, never follow a planted symlink);
+    on collision append -1, -2, … before the extension."""
+    stem, dot, ext = name.partition(".")
+    for attempt in range(1000):
+        candidate = name if attempt == 0 else f"{stem}-{attempt}{dot}{ext}"
+        path = directory / candidate
+        try:
+            with open(path, "xb") as f:
+                f.write(payload)
+            return path
+        except FileExistsError:
+            continue
+    raise ValueError(f"cannot find a free filename for {name!r} in {directory}")
