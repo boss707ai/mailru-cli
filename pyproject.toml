@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mailru-cli"
+version = "0.1.0"
+description = "Agent-first command-line client for Mail.ru mailboxes (IMAP/SMTP): list, read, search, send — structured JSON output"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+keywords = ["mailru", "mail.ru", "imap", "smtp", "email", "cli", "agent"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Communications :: Email",
+]
+dependencies = [
+    "click>=8.1",
+    "imap-tools>=1.7",
+    "keyring>=24",
+    "platformdirs>=4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.urls]
+Homepage = "https://github.com/smart-boss/mailru-cli"
+
+[project.scripts]
+mailru = "mailru_cli.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mailru_cli"]
